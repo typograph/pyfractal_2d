@@ -20,81 +20,70 @@ class StepMatrix:
         cls.colors[color] = stepmatrix
     
     def __init__(self, matrix):
-        self.matrix = array(matrix, dtype="u1")
-        self.W, self.H = self.matrix.shape
-        self.__array_interface__ = self.matrix.__array_interface__
+        self.depths = [ array(matrix, dtype="u1") ]        
+        self.__array_interface__ = self.depths[0].__array_interface__
+        self.clset = {cell for row in self.depths[0] for cell in row}
+
+    def at_depth(self, n):
+        if len(self.depths) <= n:
+            self.depths.extend([None]*(n-len(self.depths)+1))
+        if self.depths[n] is None:
+            self.depths[n] = self.expand(n)
+        return self.depths[n]
+            
+    def expand(self, n):
         
-        self.widths = None
-        self.heights = None
+        submatrices = {k:self.colors[k].at_depth(n-1) for k in self.clset}
         
-    def upsize(self):
-        """Calculate the size on next step.
+        basis = self.at_depth(0)
         
-        This checks if the sizes of all component matrices match 
-        """
-        if self.widths is not None and self.heights is not None:
-            return
+        H, W = basis.shape
         
-        self.widths = [None]*self.W
-        self.heights = [None]*self.H
+        widths = [None]*W
+        heights = [None]*H
         
-        for x, row in enumerate(self.matrix):
+        for x, row in enumerate(basis):
             for y, cell in enumerate(row):
-                if cell not in self.colors:
-                    raise ValueError("No expansion rule for color {}".format(cell))
-                elif self.colors[cell] is not None:
-                    if self.widths[y] is None:
-                        self.widths[y] = self.colors[cell].W
-                    elif self.widths[y] == self.colors[cell].W:
-                        pass
-                    else:
-                        raise ValueError("Cell {}@({},{}) expands to W={}, that is already occupied".format(cell, x, y, self.colors[cell].W))
+                if widths[y] is None:
+                    widths[y] = submatrices[cell].shape[1]
+                elif widths[y] != submatrices[cell].shape[1]:
+                    raise ValueError("Cell {}@({},{}) expands to W={},"
+                        " but a previous cell expanded to W={}"
+                        .format(cell, x, y, submatrices[cell].shape[1], widths[y]))
+                
+                if heights[x] is None:
+                    heights[x] = submatrices[cell].shape[0]
+                elif heights[x] != submatrices[cell].shape[0]:
+                    raise ValueError("Cell {}@({},{}) expands to H={}, "
+                        "but a previous cell expanded to H={}"
+                        .format(cell, x, y, submatrices[cell].shape[0], heights[x]))
                     
-                    if self.heights[x] is None:
-                        self.heights[x] = self.colors[cell].H
-                    elif self.heights[x] == self.colors[cell].H:
-                        pass
-                    else:
-                        raise ValueError("Cell {}@({},{}) expands to H={}, that is already occupied".format(cell, x, y, self.colors[cell].H))
-                    
-        for y, w in enumerate(self.widths):
-            if w is None:
-                raise ValueError("Row {} expands to None".format(y))
-        for x, h in enumerate(self.heights):
-            if h is None:
-                raise ValueError("Column {} expands to None".format(x))
-    
-    def expand(self):
-        self.upsize()
+        if None in widths:
+            raise ValueError("None encountered in column widths : {}".format(widths))
+        if None in heights:
+            raise ValueError("None encountered in row heights : {}".format(heights))
         
         # New empty matrix
-        matrix = zeros((sum(self.widths), sum(self.heights)))
+        matrix = zeros((sum(widths), sum(heights)), dtype="u1")
         
         i, j = 0, 0
-        for x, row in enumerate(self.matrix):
+        for x, row in enumerate(basis):
             for y, cell in enumerate(row):
-                ww, hh = 0, 0
-                if cell is None: # Everything is already None
-                    hh = self.heights[x]
-                    ww = self.widths[y]
-                elif cell not in self.colors or self.colors[cell] is None:
-                    raise ValueError("Cannot expand cell {}@({},{})".format(cell, x, y))
-                else:
-                    nstep = self.colors[cell]
-                    ww, hh = nstep.W, nstep.H
-                    matrix[i:i+ww, j:j+hh] = nstep
+                nstep = submatrices[cell]
+                hh, ww = nstep.shape
+                matrix[j:j+hh, i:i+ww] = nstep
                 i += ww
             i = 0
             j += hh
         
-        return StepMatrix(matrix)
+        return matrix
     
-    @classmethod
-    def expand_all(cls):
-        expanded_colors = {}
-        for c in cls.colors:
-            expanded_colors[c] = cls.colors[c].expand()
-        cls.colors = expanded_colors
+    #@classmethod
+    #def expand_all(cls):
+        #expanded_colors = {}
+        #for c in cls.colors:
+            #expanded_colors[c] = cls.colors[c].expand()
+        #cls.colors = expanded_colors
 
 class NoneMatrix(StepMatrix):
     def __init__(self, W, H):
@@ -128,25 +117,7 @@ if __name__ == "__main__":
                                         [C, B, C],
                                         [C, C, C]]))
 
-    for i in range(n-1):
-        StepMatrix.expand_all()
-
-    #print()
-    #print(StepMatrix.colors[1].matrix)
-    #print(q1.expand().expand().expand().expand().expand().W)
-
-    #quit()
-    
-    fractal = Image.fromarray(StepMatrix.colors[0].expand().matrix, "P")
-    
-    #mtr = StepMatrix.colors[0].expand().matrix
-    
-    #fractal = Image.new("P", mtr.shape)
-    #for x, row in enumerate(mtr):
-        #for y, cell in enumerate(row):
-            #fractal.putpixel((x, y), cell)
-    
-    
+    fractal = Image.fromarray(StepMatrix.colors[A].at_depth(n), "P")
     palette = ImagePalette.ImagePalette()
     palette.getcolor((0, 0, 0))
     palette.getcolor((255, 255, 255))
