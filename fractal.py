@@ -1,12 +1,12 @@
 """
 We assume that every step preserves continuity,
 that is all stepmatrices in a row has same height.
-and all stepmatrices in a column have the same width
+and all stepmatrices in a column have the same width.
 
 We assume that there are no cases when the same colors
-expand to different matrices
+expand to different matrices.
 
-The color None expands to minimum possible None matrix
+The color None expands to the smallest possible None matrix.
 """
 
 from numpy import array, zeros
@@ -27,7 +27,11 @@ class StepMatrix:
         self.widths = None
         self.heights = None
         
-    def build(self):
+    def upsize(self):
+        """Calculate the size on next step.
+        
+        This checks if the sizes of all component matrices match 
+        """
         if self.widths is not None and self.heights is not None:
             return
         
@@ -36,8 +40,9 @@ class StepMatrix:
         
         for x, row in enumerate(self.matrix):
             for y, cell in enumerate(row):
-                if cell in self.colors and \
-                   self.colors[cell] is not None:
+                if cell not in self.colors:
+                    raise ValueError("No expansion rule for color {}".format(cell))
+                elif self.colors[cell] is not None:
                     if self.widths[y] is None:
                         self.widths[y] = self.colors[cell].W
                     elif self.widths[y] == self.colors[cell].W:
@@ -60,7 +65,7 @@ class StepMatrix:
                 raise ValueError("Column {} expands to None".format(x))
     
     def expand(self):
-        self.build()
+        self.upsize()
         
         # New empty matrix
         matrix = zeros((sum(self.widths), sum(self.heights)))
@@ -77,12 +82,7 @@ class StepMatrix:
                 else:
                     nstep = self.colors[cell]
                     ww, hh = nstep.W, nstep.H
-                    for xx, rrow in enumerate(nstep.matrix):
-                        for yy, ccell in enumerate(rrow):
-                            try:
-                                matrix[i+xx, j+yy] = ccell
-                            except IndexError:
-                                print(i, xx, j, yy, cell)
+                    matrix[i:i+ww, j:j+hh] = nstep
                 i += ww
             i = 0
             j += hh
@@ -109,6 +109,11 @@ if __name__ == "__main__":
         print("Please supply a filename")
         quit()
 
+    if len(sys.argv) > 2:
+        n = int(sys.argv[2])
+    else:
+        n = 3
+
     A, B, C = 0, 1, 2
 
     StepMatrix.add_color(A, StepMatrix([[A, A, A],
@@ -123,9 +128,8 @@ if __name__ == "__main__":
                                         [C, B, C],
                                         [C, C, C]]))
 
-    StepMatrix.expand_all()
-    StepMatrix.expand_all()
-    StepMatrix.expand_all()
+    for i in range(n-1):
+        StepMatrix.expand_all()
 
     #print()
     #print(StepMatrix.colors[1].matrix)
@@ -133,7 +137,7 @@ if __name__ == "__main__":
 
     #quit()
     
-    fractal = Image.fromarray(StepMatrix.colors[0].matrix, "P")
+    fractal = Image.fromarray(StepMatrix.colors[0].expand().matrix, "P")
     
     #mtr = StepMatrix.colors[0].expand().matrix
     
